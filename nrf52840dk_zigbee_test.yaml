@@ -19,8 +19,6 @@ esphome:
 
 nrf52:
   board: nrf52840dk_nrf52840
-  # MCUBoot is the default bootloader for boards not in the known list
-  # Flash using J-Link/PYOCD
 
 logger:
   level: DEBUG
@@ -28,16 +26,14 @@ logger:
 
 # Zigbee configuration
 zigbee:
-  # Set to "once" for initial flash to clear any old network data,
-  # then change to false for normal operation
   wipe_on_boot: once
   power_source: DC_SOURCE
   on_join:
     then:
       - logger.log: "Successfully joined Zigbee network!"
-      - output.turn_on: network_status_led
+      - output.turn_on: status_led
       - delay: 2s
-      - output.turn_off: network_status_led
+      - output.turn_off: status_led
 
 # GPIO Outputs for LEDs
 output:
@@ -50,16 +46,9 @@ output:
 
   # LED 2 - Network status indicator (active low)
   - platform: gpio
-    id: network_status_led
+    id: status_led
     pin:
       number: P0.14
-      inverted: true
-
-  # LED 3 - Factory reset feedback (active low)
-  - platform: gpio
-    id: factory_reset_led
-    pin:
-      number: P0.15
       inverted: true
 
 # User LED as a Zigbee-controllable switch
@@ -112,24 +101,24 @@ binary_sensor:
           - ON for at most 1s
           - OFF for at least 0.5s
         then:
-          - output.turn_on: factory_reset_led
+          - output.turn_on: status_led
           - delay: 100ms
-          - output.turn_off: factory_reset_led
+          - output.turn_off: status_led
       # Long press (3+ seconds) - factory reset
       - timing:
           - ON for at least 3s
         then:
           - logger.log: "Factory reset initiated!"
           # Blink LED rapidly to indicate factory reset
-          - output.turn_on: factory_reset_led
+          - output.turn_on: status_led
           - delay: 200ms
-          - output.turn_off: factory_reset_led
+          - output.turn_off: status_led
           - delay: 200ms
-          - output.turn_on: factory_reset_led
+          - output.turn_on: status_led
           - delay: 200ms
-          - output.turn_off: factory_reset_led
+          - output.turn_off: status_led
           - delay: 200ms
-          - output.turn_on: factory_reset_led
+          - output.turn_on: status_led
           - delay: 200ms
-          - output.turn_off: factory_reset_led
+          - output.turn_off: status_led
           - zigbee.factory_reset
