@@ -26,6 +26,7 @@ logger:
 
 # Zigbee configuration
 zigbee:
+  id: zigbee_hub
   wipe_on_boot: once
   power_source: DC_SOURCE
   on_join:
@@ -35,14 +36,15 @@ zigbee:
       - delay: 2s
       - output.turn_off: status_led
 
-# GPIO Outputs for LEDs
+# PWM and GPIO Outputs for LEDs
 output:
-  # LED 1 - User controllable LED (active low)
-  - platform: gpio
+  # LED 1 - User controllable LED with PWM (active low)
+  - platform: zephyr_pwm
     id: user_led_output
     pin:
       number: P0.13
       inverted: true
+    frequency: 1kHz
 
   # LED 2 - Network status indicator (active low)
   - platform: gpio
@@ -51,12 +53,43 @@ output:
       number: P0.14
       inverted: true
 
-# User LED as a Zigbee-controllable switch
-switch:
-  - platform: output
-    id: user_led_switch
-    name: "User_LED"
+# User LED as a Zigbee-controllable dimmable light
+light:
+  - platform: monochromatic
+    id: user_led_light
+    name: "Dimmable_LED"
     output: user_led_output
+    default_transition_length: 1s
+    zigbee_id: zigbee_hub
+    effects:
+      - pulse:
+          name: "Breathe"
+          min_brightness: 20%
+          max_brightness: 100%
+          transition_length: 4s
+          update_interval: 6s
+      - strobe:
+          name: "Blink"
+          colors:
+            - brightness: 100%
+              duration: 1000ms
+            - brightness: 77%
+              duration: 800ms
+            - brightness: 10%
+              duration: 500ms
+            - brightness: 77%
+              duration: 700ms
+      - lambda:
+          name: "Candle"
+          update_interval: 50ms
+          lambda: |-
+            static float val = 0.2;
+            val += (random_float() - 0.5) * 0.05;
+            val = clamp(val, 0.6f, 1.0f);
+            auto call = id(user_led_light).make_call();
+            call.set_brightness(val);
+            call.set_transition_length(0);
+            call.perform();
 
 # Dummy sensor to satisfy Zigbee 2-endpoint minimum requirement
 sensor:
@@ -64,6 +97,7 @@ sensor:
     name: "Uptime"
     unit_of_measurement: "s"
     lambda: return millis() / 1000;
+    zigbee_id: zigbee_hub
 
 # Button 1 - toggles the user LED locally
 binary_sensor:
@@ -81,7 +115,7 @@ binary_sensor:
       - delayed_off: 10ms
     on_press:
       then:
-        - switch.toggle: user_led_switch
+        - light.toggle: user_led_light
 
   # Button 2 - Factory reset button (long press)
   - platform: gpio

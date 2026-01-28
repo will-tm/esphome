@@ -17,13 +17,14 @@ from .const_zephyr import (
     CONF_POWER_SOURCE,
     CONF_WIPE_ON_BOOT,
     CONF_ZIGBEE_ID,
+    CONF_ZIGBEE_LIGHT,
     KEY_EP_NUMBER,
     KEY_ZIGBEE,
     POWER_SOURCE,
     ZigbeeComponent,
     zigbee_ns,
 )
-from .zigbee_zephyr import zephyr_binary_sensor, zephyr_sensor, zephyr_switch
+from .zigbee_zephyr import zephyr_binary_sensor, zephyr_light, zephyr_sensor, zephyr_switch
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def zigbee_set_core_data(config: ConfigType) -> ConfigType:
 BINARY_SENSOR_SCHEMA = cv.Schema({}).extend(zephyr_binary_sensor)
 SENSOR_SCHEMA = cv.Schema({}).extend(zephyr_sensor)
 SWITCH_SCHEMA = cv.Schema({}).extend(zephyr_switch)
+LIGHT_SCHEMA = cv.Schema({}).extend(zephyr_light)
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
@@ -117,6 +119,15 @@ async def setup_switch(entity: cg.MockObj, config: ConfigType) -> None:
         await zephyr_setup_switch(entity, config)
 
 
+async def setup_light(entity: cg.MockObj, config: ConfigType) -> None:
+    if not config.get(CONF_ZIGBEE_ID) or config.get(CONF_INTERNAL):
+        return
+    if CORE.using_zephyr:
+        from .zigbee_zephyr import zephyr_setup_light
+
+        await zephyr_setup_light(entity, config)
+
+
 def consume_endpoint(config: ConfigType) -> ConfigType:
     if not config.get(CONF_ZIGBEE_ID) or config.get(CONF_INTERNAL):
         return config
@@ -141,6 +152,10 @@ def validate_sensor(config: ConfigType) -> ConfigType:
 
 
 def validate_switch(config: ConfigType) -> ConfigType:
+    return consume_endpoint(config)
+
+
+def validate_light(config: ConfigType) -> ConfigType:
     return consume_endpoint(config)
 
 

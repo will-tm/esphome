@@ -54,6 +54,7 @@ from .const_zephyr import (
     CONF_WIPE_ON_BOOT,
     CONF_ZIGBEE_BINARY_SENSOR,
     CONF_ZIGBEE_ID,
+    CONF_ZIGBEE_LIGHT,
     CONF_ZIGBEE_SENSOR,
     CONF_ZIGBEE_SWITCH,
     KEY_BASIC_ATTRS_GENERATED,
@@ -66,9 +67,12 @@ from .const_zephyr import (
     ZB_ZCL_CLUSTER_ID_BINARY_INPUT,
     ZB_ZCL_CLUSTER_ID_BINARY_OUTPUT,
     ZB_ZCL_CLUSTER_ID_IDENTIFY,
+    ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
+    ZB_ZCL_CLUSTER_ID_ON_OFF,
     ZB_ZCL_IDENTIFY_ATTRS_T,
     AnalogAttrs,
     BinaryAttrs,
+    LevelAttrs,
     ZigbeeComponent,
     zigbee_ns,
 )
@@ -76,6 +80,7 @@ from .const_zephyr import (
 ZigbeeBinarySensor = zigbee_ns.class_("ZigbeeBinarySensor", cg.Component)
 ZigbeeSensor = zigbee_ns.class_("ZigbeeSensor", cg.Component)
 ZigbeeSwitch = zigbee_ns.class_("ZigbeeSwitch", cg.Component)
+ZigbeeLight = zigbee_ns.class_("ZigbeeLight", cg.Component)
 
 # BACnet engineering units mapping (ZCL uses BACnet unit codes)
 # See: https://github.com/zigpy/zha/blob/dev/zha/application/platforms/number/bacnet.py
@@ -135,6 +140,15 @@ zephyr_switch = cv.Schema(
         cv.OnlyWith(CONF_ZIGBEE_ID, ["nrf52", "zigbee"]): cv.use_id(ZigbeeComponent),
         cv.OnlyWith(CONF_ZIGBEE_SWITCH, ["nrf52", "zigbee"]): cv.declare_id(
             ZigbeeSwitch
+        ),
+    }
+)
+
+zephyr_light = cv.Schema(
+    {
+        cv.OnlyWith(CONF_ZIGBEE_ID, ["nrf52", "zigbee"]): cv.use_id(ZigbeeComponent),
+        cv.OnlyWith(CONF_ZIGBEE_LIGHT, ["nrf52", "zigbee"]): cv.declare_id(
+            ZigbeeLight
         ),
     }
 )
@@ -345,6 +359,10 @@ async def zephyr_setup_switch(entity: cg.MockObj, config: ConfigType) -> None:
     CORE.add_job(_add_switch, entity, config)
 
 
+async def zephyr_setup_light(entity: cg.MockObj, config: ConfigType) -> None:
+    CORE.add_job(_add_light, entity, config)
+
+
 def _slot_index() -> int:
     """Find the next available endpoint slot"""
     slot = next(
@@ -454,3 +472,71 @@ async def _add_switch(entity: cg.MockObj, config: ConfigType) -> None:
         ZB_ZCL_CLUSTER_ID_BINARY_OUTPUT,
         "ZB_HA_CUSTOM_ATTR_DEVICE_ID",
     )
+
+
+async def _add_light(entity: cg.MockObj, config: ConfigType) -> None:
+    """Add a Zigbee light endpoint with On/Off and Level Control clusters."""
+    _ensure_basic_attrs_generated()
+
+    slot_index = _slot_index()
+
+    prefix = f"zigbee_ep{slot_index + 1}"
+    attrs_name = f"{prefix}_level_attrs"
+    on_off_attr_list_name = f"{prefix}_on_off_attrib_list"
+    level_attr_list_name = f"{prefix}_level_attrib_list"
+    cluster_list_name = f"{prefix}_cluster_list"
+    ep_name = f"{prefix}_ep"
+
+    # Create level attributes struct
+    attrs = zigbee_new_variable(attrs_name, LevelAttrs)
+
+    # Initialize level control attributes
+    cg.add(AssignmentExpression("", "", attrs.current_level, 254))  # Start at max
+    cg.add(AssignmentExpression("", "", attrs.remaining_time, 0))
+    cg.add(AssignmentExpression("", "", attrs.min_level, 1))
+    cg.add(AssignmentExpression("", "", attrs.max_level, 254))
+    cg.add(AssignmentExpression("", "", attrs.on_off, 1))  # Start on
+
+    # Create On/Off cluster attribute list
+    zigbee_new_attr_list(
+        on_off_attr_list_name,
+        "ESPHOME_ZB_ZCL_DECLARE_ON_OFF_ATTRIB_LIST",
+        f"&{attrs}.on_off",
+    )
+
+    # Create Level Control cluster attribute list
+    zigbee_new_attr_list(
+        level_attr_list_name,
+        "ESPHOME_ZB_ZCL_DECLARE_LEVEL_CONTROL_ATTRIB_LIST",
+        f"&{attrs}.current_level",
+        f"&{attrs}.remaining_time",
+        f"&{attrs}.min_level",
+        f"&{attrs}.max_level",
+    )
+
+    # Create cluster list with both On/Off and Level Control clusters
+    clusters = [
+        ZigbeeClusterDesc(ZB_ZCL_CLUSTER_ID_ON_OFF, on_off_attr_list_name),
+        ZigbeeClusterDesc(ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL, level_attr_list_name),
+    ]
+    cluster_list_name, all_clusters = zigbee_new_cluster_list(cluster_list_name, clusters)
+
+    # Register endpoint as dimmable light
+    zigbee_register_ep(
+        ep_name,
+        cluster_list_name,
+        3,  # Report On/Off + current_level + remaining_time
+        all_clusters,
+        slot_index,
+        "ZB_HA_DIMMABLE_LIGHT_DEVICE_ID",
+    )
+
+    # Create ESPHome component
+    var = cg.new_Pvariable(config[CONF_ZIGBEE_LIGHT], entity)
+    await cg.register_component(var, {})
+
+    cg.add(var.set_endpoint(slot_index + 1))
+    cg.add(var.set_cluster_attributes(attrs))
+
+    hub = await cg.get_variable(config[CONF_ZIGBEE_ID])
+    cg.add(var.set_parent(hub))
