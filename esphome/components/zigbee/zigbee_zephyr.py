@@ -56,6 +56,7 @@ from .const_zephyr import (
     CONF_ZIGBEE_ID,
     CONF_ZIGBEE_SENSOR,
     CONF_ZIGBEE_SWITCH,
+    KEY_BASIC_ATTRS_GENERATED,
     KEY_EP_NUMBER,
     KEY_ZIGBEE,
     POWER_SOURCE,
@@ -165,11 +166,19 @@ async def zephyr_to_code(config: ConfigType) -> None:
 
     await cg.register_component(var, config)
 
-    await _attr_to_code(config)
+    CORE.data[KEY_ZIGBEE][CONF_POWER_SOURCE] = config[CONF_POWER_SOURCE]
+
     CORE.add_job(_ctx_to_code, config)
 
 
-async def _attr_to_code(config: ConfigType) -> None:
+def _ensure_basic_attrs_generated() -> None:
+    if CORE.data[KEY_ZIGBEE].get(KEY_BASIC_ATTRS_GENERATED):
+        return
+
+    CORE.data[KEY_ZIGBEE][KEY_BASIC_ATTRS_GENERATED] = True
+
+    power_source = CORE.data[KEY_ZIGBEE].get(CONF_POWER_SOURCE, "DC_SOURCE")
+
     # Create the basic attributes structure and attribute list
     basic_attrs = zigbee_new_variable("zigbee_basic_attrs", ZB_ZCL_BASIC_ATTRS_EXT_T)
     zigbee_new_attr_list(
@@ -186,7 +195,7 @@ async def _attr_to_code(config: ConfigType) -> None:
         ),
         zigbee_assign(
             basic_attrs.power_source,
-            cg.RawExpression(POWER_SOURCE[config[CONF_POWER_SOURCE]]),
+            cg.RawExpression(POWER_SOURCE[power_source]),
         ),
         zigbee_set_string(basic_attrs.location_id, ""),
         zigbee_assign(
@@ -358,6 +367,8 @@ async def _add_zigbee_ep(
     app_device_id: str,
     extra_field_values: dict[str, int] | None = None,
 ) -> None:
+    _ensure_basic_attrs_generated()
+
     slot_index = _slot_index()
 
     prefix = f"zigbee_ep{slot_index + 1}"

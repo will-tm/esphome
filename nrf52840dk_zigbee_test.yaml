@@ -1,0 +1,135 @@
+---
+# ESPHome Zigbee test configuration for nRF52840DK
+#
+# nRF52840DK Pin Mapping:
+#   Buttons (active low with internal pull-up):
+#     - Button 1: P0.11
+#     - Button 2: P0.12
+#     - Button 3: P0.24
+#     - Button 4: P0.25
+#   LEDs (active low):
+#     - LED 1: P0.13
+#     - LED 2: P0.14
+#     - LED 3: P0.15
+#     - LED 4: P0.16
+
+esphome:
+  name: nrf52840dk-zigbee-test
+  friendly_name: "nRF52840DK Zigbee Test"
+
+nrf52:
+  board: nrf52840dk_nrf52840
+  # MCUBoot is the default bootloader for boards not in the known list
+  # Flash using J-Link/PYOCD
+
+logger:
+  level: DEBUG
+  hardware_uart: UART0  # Use J-Link virtual COM port on nRF52840DK
+
+# Zigbee configuration
+zigbee:
+  # Set to "once" for initial flash to clear any old network data,
+  # then change to false for normal operation
+  wipe_on_boot: once
+  power_source: DC_SOURCE
+  on_join:
+    then:
+      - logger.log: "Successfully joined Zigbee network!"
+      - output.turn_on: network_status_led
+      - delay: 2s
+      - output.turn_off: network_status_led
+
+# GPIO Outputs for LEDs
+output:
+  # LED 1 - User controllable LED (active low)
+  - platform: gpio
+    id: user_led_output
+    pin:
+      number: P0.13
+      inverted: true
+
+  # LED 2 - Network status indicator (active low)
+  - platform: gpio
+    id: network_status_led
+    pin:
+      number: P0.14
+      inverted: true
+
+  # LED 3 - Factory reset feedback (active low)
+  - platform: gpio
+    id: factory_reset_led
+    pin:
+      number: P0.15
+      inverted: true
+
+# User LED as a Zigbee-controllable switch
+switch:
+  - platform: output
+    id: user_led_switch
+    name: "User_LED"
+    output: user_led_output
+
+# Dummy sensor to satisfy Zigbee 2-endpoint minimum requirement
+sensor:
+  - platform: template
+    name: "Uptime"
+    unit_of_measurement: "s"
+    lambda: return millis() / 1000;
+
+# Button 1 - toggles the user LED locally
+binary_sensor:
+  - platform: gpio
+    id: button_1
+    internal: true
+    pin:
+      number: P0.11
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 10ms
+      - delayed_off: 10ms
+    on_press:
+      then:
+        - switch.toggle: user_led_switch
+
+  # Button 2 - Factory reset button (long press)
+  - platform: gpio
+    id: factory_reset_button
+    internal: true
+    pin:
+      number: P0.12
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 10ms
+    on_multi_click:
+      # Single press - blink LED to show button works
+      - timing:
+          - ON for at most 1s
+          - OFF for at least 0.5s
+        then:
+          - output.turn_on: factory_reset_led
+          - delay: 100ms
+          - output.turn_off: factory_reset_led
+      # Long press (3+ seconds) - factory reset
+      - timing:
+          - ON for at least 3s
+        then:
+          - logger.log: "Factory reset initiated!"
+          # Blink LED rapidly to indicate factory reset
+          - output.turn_on: factory_reset_led
+          - delay: 200ms
+          - output.turn_off: factory_reset_led
+          - delay: 200ms
+          - output.turn_on: factory_reset_led
+          - delay: 200ms
+          - output.turn_off: factory_reset_led
+          - delay: 200ms
+          - output.turn_on: factory_reset_led
+          - delay: 200ms
+          - output.turn_off: factory_reset_led
+          - zigbee.factory_reset

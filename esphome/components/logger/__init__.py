@@ -397,16 +397,11 @@ async def to_code(config):
         elif config[CONF_HARDWARE_UART] == USB_SERIAL_JTAG:
             add_idf_sdkconfig_option("CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG", True)
             cg.add_define("USE_LOGGER_UART_SELECTION_USB_SERIAL_JTAG")
-    try:
-        uart_selection(USB_SERIAL_JTAG)
+    # Only define USB logger macros when actually using USB
+    if config[CONF_HARDWARE_UART] == USB_SERIAL_JTAG:
         cg.add_define("USE_LOGGER_USB_SERIAL_JTAG")
-    except cv.Invalid:
-        pass
-    try:
-        uart_selection(USB_CDC)
+    if config[CONF_HARDWARE_UART] == USB_CDC:
         cg.add_define("USE_LOGGER_USB_CDC")
-    except cv.Invalid:
-        pass
 
     if CORE.is_nrf52:
         if config[CONF_HARDWARE_UART] == UART0:

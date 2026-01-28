@@ -26,6 +26,7 @@ POWER_SOURCE = {
 # Keys for CORE.data storage
 KEY_ZIGBEE = "zigbee"
 KEY_EP_NUMBER = "ep_number"
+KEY_BASIC_ATTRS_GENERATED = "basic_attrs_generated"
 
 # External ZBOSS SDK types (just strings for codegen)
 ZB_ZCL_BASIC_ATTRS_EXT_T = "zb_zcl_basic_attrs_ext_t"

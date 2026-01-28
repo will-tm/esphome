@@ -249,6 +249,8 @@ async def to_code(config: ConfigType) -> None:
     else:
         zephyr_add_prj_conf("CPP", True)
         zephyr_add_prj_conf("REQUIRES_FULL_LIBCPP", True)
+    # GPIO support
+    zephyr_add_prj_conf("GPIO", True)
     # watchdog
     zephyr_add_prj_conf("WATCHDOG", True)
     zephyr_add_prj_conf("WDT_DISABLE_AT_BOOT", False)
